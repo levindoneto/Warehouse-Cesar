@@ -1,0 +1,51 @@
+; TRABALHO COM O PROCESSADOR CESAR - 2015/1 - CASO DE TESTE 1 
+;
+; O conte?do desse arquivo deve ser copiado e colado no seu 
+; programa de implementa??o do trabalho
+; LEMBRE-SE: seu programa n?o deve ter nenhum c?digo nem dados 
+; na area de memoria que vai do endere?o 32768 ate o endere?o 36863.
+; Para esse conjunto de dados, os resultados devem ser os seguintes:
+; NUMERO DE ESTANTES = 3
+; TOTAIS POR CONJUNTO
+;	PE?A 0 = 24
+;	PE?A 1 = 27
+;	PE?A 2 = 30
+;	OUTRAS = 0
+; TOTAIS POR ESTANTE
+;	ESTANTE 0
+;		PE?A 0 = 5
+;		PE?A 1 = 6
+;		PE?A 2 = 7
+;	ESTANTE 1
+;		PE?A 0 = 8
+;		PE?A 1 = 9
+;		PE?A 2 = 10
+;	ESTANTE 2
+;		PE?A 0 = 11
+;		PE?A 1 = 12
+;		PE?A 2 = 13
+	org		32768
+	dw		ListaDeEstantes
+ListaDeEstantes:
+	dw		Estante0
+	dw		Estante1
+	dw		Estante2
+	dw		0
+Estante0:
+	dw		h0005
+	dw		h0106
+	dw		h0207
+	dw		h8000
+Estante1:
+	dw		h0008
+	dw		h0109
+	dw		h020A
+	dw		h8000
+Estante2:
+	dw		h000B
+	dw		h010C
+	dw		h020D
+	dw		h8000
+; Identificacao do caso de teste no visor do Cesar
+	org 65500
+	dab 'Caso de Teste #1 carregado!  
