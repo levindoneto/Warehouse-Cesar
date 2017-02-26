@@ -1,0 +1,847 @@
+;||----------------------------------------------------------------- Declaracoes----------------------------------------------------------------------------||
+ORG H7000 								                  ; Address 28672 - 'Declaracoes'
+	msgMenu: 		DAB '->     Menu: E - T - C - F        <-'                ; Opcoes do menu
+	msgNome: 		DAB '-> Levindo Gabriel T Neto 00243685<-'                ; Identificacao do aluno
+	msgFim:  		DAB '-> Execucao do programa encerrada <-'                ; Mensagem de finalizar
+	msgEstantes: 		DAB '-> O numero de estantes eh:       <-'                ; Mensagem para pedir o numero de estantes
+	msgInsConjunto:		DAB '-> Ponha o Conjunto:              <-'                ; T - Ler numero de conjunto
+	msgT: 			DAB '-> Ponha a estante:               <-'                ; E - Para pedir a estante para o usuario
+	msgConjInex:		DAB '-> O conjunto informado nao existe<-'                ; Informação de que não há esse conjunto na estante informada
+	msgEstanteError:        DAB '-> Estante nao encontrada         <-'
+	msgTotalPecas:		DAB '-> Total de pecas:                <-'                ; Para informar o total de pecas do conjunto informado
+	total:                  DB 0                                                      ; Armazena o total de estantes                                                          
+	bytemais:               DB 0                                                      ; Usado para pegar o byte mais significativo
+	bytemenos:              DB 0                                                      ; Usado para pegar o byte menos significativo
+	numconjunto:            DB 0                                                      ; Para pegar o numero do conjunto
+	varconversao:           DB 0                                                      ; Variavel auxiliar para a conversao de ascii->int 
+	posicaoCursor:          DW 0                                                      ; Para saber onde deve ser posicionado o cursor 
+	Deslocamento:           DW 0                                                      ; Usada para a manipulacao do numero(centena->dezena->unidade)
+	Flag:                   DW 0                                                      ; Flag que informa em qual contexto está a execucao
+	unidade:                DW 0                                                      ; Unidade do numero informado pelo usuario
+	dezena:                 DW 0                                                      ; Dezena do numero informado pelo usuario
+	centena:                DW 0                                                      ; Centena do numero informado pelo usuario
+        TotalDePecas:           DW 0                                                      ; Para guardar o total de pecas do conjunto pedido
+	Achou:                  DW 0                                                      ; Flag para saber quando achou o conjunto pedido
+        Numero:                 DW 0                                                      ; Recebe o numero Convertido.
+	Estante:                DW 0                                                      ; Recebe o numero estante             	
+
+ORG 65498
+	flag_dig:               DB 0;                                           	  ; Flag para saber se alguma tecla foi apertada
+	tecla:                  DB 0;                                                     ; Tecla que o usuario digita
+	led:                    DAB [36]                                                  ; Led com 36 posicoes (0-35)
+	                        
+
+;||-------------------------------------------------------------- Casos de teste --------------------------------------------------------------------------||
+ORG H8000
+; >>> Exemplos dos casos de teste do Moodle, alteracoes podem ser feitas aqui para colocar outras estantes <<<
+; TRABALHO COM O PROCESSADOR CESAR - 2015/1 - CASO DE TESTE 1 
+;
+; O conteudo desse arquivo deve ser copiado e colado no seu 
+; programa de implementacao do trabalho
+; LEMBRE-SE: seu programa nao deve ter nenhum codigo nem dados 
+; na area de memoria que vai do endereco 32768 ate o endereco 36863.
+; Para esse conjunto de dados, os resultados devem ser os seguintes:
+; NUMERO DE ESTANTES = 3
+; TOTAIS POR CONJUNTO
+;	PECA 0 = 24
+;	PECA 1 = 27
+;	PECA 2 = 30
+;	OUTRAS = 0
+; TOTAIS POR ESTANTE
+;	ESTANTE 0
+;		PECA 0 = 5
+;		PECA 1 = 6
+;		PECA 2 = 7
+;	ESTANTE 1
+;		PECA 0 = 8
+;		PECA 1 = 9
+;		PECA 2 = 10
+;	ESTANTE 2
+;		PECA 0 = 11
+;		PECA 1 = 12
+;		PECA 2 = 13
+	org		32768
+	                	DW		ListaDeEstantes
+ListaDeEstantes:
+	                        DW		Estante0
+	                        DW		Estante1
+	                        DW		Estante2
+	                        DW		0
+Estante0:
+	                        DW		H0005
+	                        DW		H0106
+	                        DW		H0207
+	                        DW		H8000
+Estante1:
+	                        DW		H0008
+	                        DW		H0109
+	                        DW		H020A
+	                        DW		H8000
+Estante2:
+	                        DW		H000B
+	                        DW		H010C
+                                DW		H020D
+	                        DW		H8000
+
+;||------------------------------------------------------------- Inicio do Programa------------------------------------------------------------------------||
+ORG 0
+MOV #65498,R6                                                                             ; Arruma a pilha
+
+;||------------------------------------------------------------- Impressões no Led ------------------------------------------------------------------------||
+_ESCREVE_NOME:
+	  MOV #36,R0                    			                          ; Tamanho da mensagem
+	  MOV #msgNome,R1                                                                 ; Endereco da mensagem a ser escrita no led
+	  MOV #led,R2                                                                     ; Endereco do LED onde deve comecar a mensagem
+	  JSR R7,_S_ESCREVER_NO_VISOR 			                                  ; Coloca a mensagem na tela
+
+	  JSR R7,aguarda_tecla                                                            ; Aguarda o usuario pressionar alguma tecla
+	  ;JSR R7,_S_LIMPA_VISOR_ITERATIVA                                                ; Limpa o visor
+
+
+_ESCREVE_MENU:
+	  MOV #36,R0                                                                      ; Tamanho da mensagem
+	  MOV #msgMenu,R1                                                                 ; Endereco da mensagem a ser escrita no visor
+	  MOV #led,R2                                                                     ; Endereco do LED onde deve iniciar a mensagem
+	  JSR R7,_S_ESCREVER_NO_VISOR                                                     ; Coloca a mensagem na tela
+
+JSR R7,aguarda_opcao                                                                      ; Aguarda o usuario pressionar alguma tecla;
+          
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+aguarda_tecla:
+          CMP flag_dig,#H80                                                               ; Fica testando com 128 para saber se algo foi digitado
+          BNE aguarda_tecla                                                               ; Se não: Fica esperando uma tecla
+	  CLR flag_dig
+	  RTS R7
+
+aguarda_opcao:
+	  CMP flag_dig,#H80
+	  BNE aguarda_opcao
+	  CLR flag_dig
+	  MOV tecla,R0
+	  CLR flag_dig
+		                                                                          ; Fica comparando no R0 qual tecla foi digitada pelo usuario,	
+	  CMP R0,#'t'                                                                     ; aceita letras letras minusculas e maiusculas
+	      BEQ jmp_le_teclado
+	  CMP R0,#'T'
+	      BEQ jmp_le_teclado	
+	  CMP R0,#'e'
+	      BEQ jmp_conta_estantes
+	  CMP R0,#'E'                 
+	      BEQ jmp_conta_estantes
+	  CMP R0,#'f'
+	      BEQ jmp_fim	
+	  CMP R0,#'F'
+	      BEQ jmp_fim
+	  CMP R0,#'c'
+              BEQ jmp_functionC
+	  CMP R0,#'C'
+              BEQ jmp_functionC	  
+	  JMP _ESCREVE_MENU	 	
+	  RTS R7
+	  
+          jmp_fim:
+	      JMP finalizar
+          jmp_conta_estantes:
+	      JMP conta_estantes
+          jmp_le_teclado:
+	      JSR R7,le_teclado_functionT
+          jmp_functionC:
+              JMP le_teclado_functionC
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+;||----------------------------------------------------------- E - Contador de estantes -------------------------------------------------------------------||
+conta_estantes:
+	
+          ;MOV R5,-(R6) ;salva R5 na pilha
+
+          CLR R5                                                                            
+          MOV H8000, R4 		                                                  ; H8000 = Endereco de inicio das estantes
+          laco_est:
+          TST (R4)+                                                                       ; Testa e pula para o proximo
+         ;CMP (R4), #0
+          BEQ fim
+          INC R5
+          BR laco_est                                                                     ; Volta para o loop para percorrer as estantes
+          fim:
+          MOV R5, total		
+;||------------------------------------------------------ Imprimindo o numero de estantes -----------------------------------------------------------------||
+          MOV #36,R0                        		                                  ; Tamanho da mensagem
+          MOV #msgEstantes,R1                		                                  ; Endereco da mensagem a ser escrita no led
+          MOV #led,R2                                                                     ; Endereco do LED onde deve comecar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR    		                                  ; Coloca a mensagem na tela
+		
+         ;MOV (R6)+,R5 ;restaura R5
+          JSR R7,imprime_valor_noLed   	                                                  ; Chama a função para imprimir na tela em ASC 	
+;||---------------------------------------------------------- Chamada da intTOstring ----------------------------------------------------------------------||	
+imprime_valor_noLed:
+          MOV	R5,-(R6)			                                          ; R5 terá que conter o inteiro para ser printado no visor
+          MOV	#led,R5                                                                   ; Move o endereço do led para o R5
+          ADD	#29,R5                                                                    ; 28 é a posição para começar a escrever o valor no led
+          MOV	R5,-(R6)         
+          JSR	R7,intTOstring                                                            ; Chama a função que converte o valor inteiro->string
+          ADD	#4,R6                                                                     ; Ajeita a pilha por causa do que foi mexido em intTOstring
+							                                  ; Retorno da função
+          JSR R7,aguarda_tecla                                                            ; Aguarda o usuario pressionar alguma tecla
+          JMP _ESCREVE_MENU
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+
+;||-------------------------------------------------------------- Int para String -------------------------------------------------------------------------||
+tabTen: DAW	10000, 1000, 100, 10 ; Tabela para divisoes por 10
+intTOstring:
+          MOV	2(R6),R1	                                                          ; R1 = x
+          MOV	4(R6),R2	                                                          ; R2 = number
+          MOV	#tabTen,R4	                   	                                  ; pTab10 = Tab10;
+          MOV	#4,R5		                                                          ; loops = 4;
+					                                                  ; Implementacao em C abaixo
+laco:				                                                          ; do {
+          MOV	#'0',R3		                                                          ; dig = '0';
+          CMP	R2,(R4)	
+          BLT Zero 
+lacodentro:
+          CMP	R2,(R4)		                                                          ; while (number >= *pTab10) 
+          BLT	itssmaller	                                                          ;	{
+          INC	R3			                                                  ; 		dig++;
+          SUB	(R4),R2		                                                          ; 		n -= *pTab10;
+          JMP	lacodentro	                                                          ; 	}
+itssmaller:
+          MOV	-1(R1),R0	                                                          ; 	*x++ = dig;
+          AND	#HFF00,R0
+          OR	R3,R0
+          MOV	R0,-1(R1)
+          INC	R1
+          Zero:
+          ADD	#2,R4		                                                          ; 	++pTab10;
+          SOB	R5,laco		                                                          ; } while (Loops--);
+	
+          ADD	#'0',R2		                                                          ; *x++ = n + ‘0’;
+          MOV	-1(R1),R0
+          AND	#HFF00,R0
+          OR	R2,R0
+          MOV	R0,-1(R1)
+          INC	R1
+	
+          MOV	-1(R1),R0	                                                          ; *x++ = '\0;
+          AND	#HFF00,R0	                 	                                  ;#65280
+          MOV	R0,-1(R1)
+	
+          RTS	R7
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+;||---------------------------------------------------------------- Limpa Buffer --------------------------------------------------------------------------||
+limpa_t:
+          mov #95,(R1)	                                                                  ; Coloca cursor "_" no visor 
+          MOV #65498,R3   	
+          CLR (R3)		                                                          ; Libera buffer do teclado
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+escreve:
+          MOV #65498,R3	                                                                  ; Ponteiro para controle do teclado
+	  MOV #95,(R1)	                                                                  ; Coloca cursor "_" no visor 
+limpabuffer:
+          CLR (R3)	                                                                  ; Libera buffer do teclado
+testa:
+          TST (R3)	                                                                  ; Testa se foi digitado algo
+          BEQ testa	                                                                  ; se nao foi, continua testando
+          CMP 65499, #13	                                                          ; se teclar enter, retorna ao ponto de chamada
+          BEQ escreve_retorna
+          CMP 65499,#27	                                                                  ; Testa se recebeu caractere ESC (1BH)
+          BEQ jump_menu	                                                                  ; se sim, vai voltar ao menu
+          CMP 65499,#8	                                                                  ; testa se recebeu Backspace
+          BEQ backsp_t	                                                                  ; se sim, vai processar Backspace
+          CMP R1, #65523	
+          BEQ limpabuffer	                                                          ; se passou do fim, nao digita mais adiante.
+          CMP 65499, #48
+          BEQ procede
+	
+          CMP 65499, #49
+          BEQ procede
+          CMP 65499, #50
+          BEQ procede
+          CMP 65499, #51
+          BEQ procede
+          CMP 65499, #52
+          BEQ procede
+          CMP 65499, #53
+          BEQ procede
+          CMP 65499, #54
+          BEQ procede
+          CMP 65499, #55	
+          BEQ procede
+          CMP 65499, #56
+          BEQ procede
+          CMP 65499, #57
+          BEQ procede
+          BR limpabuffer
+escreve_retorna:
+          RTS R7
+jump_menu:
+          JMP _ESCREVE_MENU
+procede:
+		
+          MOV 65499,(R1)	                                                          ; Se nao, move caractere lido para o visor
+          INC R1		                                                          ; Aponta para LED seguinte no visor
+          CMP R1, #65531	                                                          ; Para limpar o cursor que ficava ao lado do numero
+          BEQ jmp_limpabuffer	                                                          ; Se passou do fim, nao digita mais adiante.
+          MOV #95,(R1)	                                                                  ; Coloca cursor no LED seguinte do visor
+          JMP  limpabuffer		                                                  ; Volta a esperar por caractere
+limitadireita:
+          CLR (R1)
+JMP limpabuffer
+          jmp_limpabuffer:
+          JMP limpabuffer
+
+backsp_t:
+          CLR (R1)                                                 		          ; Apaga cursor
+          DEC R1			                                                  ; Recua ponteiro do visor
+          CMP R1,#65519		                                                          ; Se ainda nao passou do inicio,
+          BNE continua_backsp_t	                                                          ; Coloca cursor na nova posicao
+          MOV #65522,R1		                                                          ; Senao, volta para o fim do visor
+continua_backsp_t:
+          MOV #95,(R1)	                                                                  ; Coloca cursor sobre caractere digitado
+          jmp  limpa_t	                                                                  ; Volta a esperar por caracteres
+
+limitaesquerda:
+          JMP limpabuffer
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+
+;||---------------------------------------------------------------- T - Ler do teclado --------------------------------------------------------------------||
+le_teclado_functionT:
+
+          MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgInsConjunto,R1                                                          ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR
+          JSR R7, ClearAllReg
+          MOV #65520, R1                    
+          MOV #20,PosicaoCursor
+          JSR R7, LerTeclado
+          JSR R7, MultiplicaNumero
+
+
+          MOV #ListaDeEstantes,R0                                                         ; Move o endereço da primeira 'estante' para R0
+
+PercoreLista:
+          MOV (R0)+,R1                                                                    ; Move o local do elemento para a 'estante'
+          BEQ FimLista                                                                    ; Caso o endereço da 'estante' for zero entao desvia para o fim
+
+PercorreEstante:
+	  CLR R3
+          CLR R2
+          MOV (R1)+,R2                                                                    ; Busca o elemento da 'estante'
+          BMI FimEstante                                                                  ; Caso o elemento for negativo entao acabou 'estante'
+          MOV R2,R3                                                                       ; Copia o elemento para outro registrador
+          ASR R3                                                                          ; Deixa separado os bits que sao 'conjunto'                  
+          ASR R3
+          ASR R3
+          ASR R3
+          ASR R3
+          ASR R3 
+          ASR R3 
+          ASR R3
+          CMP R3,Numero                                                                   ; Caso o conjunto o conjunto nao for procurado,
+          BNE PercorreEstante                                                             ; volta e busca outro elemento
+       
+          AND #HFF,R2                                                                     ; Caso o conjunto e' procurado
+          ADD R2,TotalDePecas                                                             ; Deixa separado os bits que sao da 'quantidade'
+          INC Achou
+
+          JMP PercorreEstante                                                             ; Volta até que termine a 'estante'.
+
+FimEstante:                        
+              
+          JMP PercoreLista                                                                ; Volta e Percorre todas as estantes
+FimLista:                                                                                 ; Verifica se (Flag==0) então conjunto nao encontrado
+          CMP #0,Achou                        
+          BEQ NotFound
+AchouEst:
+          MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgTotalPecas,R1                                                           ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR        
+
+          MOV TotalDePecas ,R5
+
+          MOV	R5,-(R6)                                                                  ; R5 tera' que conter o inteiro para ser printado no visor
+          MOV	#led,R5                                                                   ; Move o endereço do led para o R5
+          ADD	#20,R5                                                                    ; 28 e' a posição para comecar a escrever o valor no led
+          MOV	R5,-(R6)         
+          JSR	R7,intTOstring                                                            ; Chama a funcao que converte o valor inteiro->string
+          ADD	#4,R6                                                                     ; Ajeita a pilha por causa do que foi mexido em intTOstring. 
+	  JSR R7,aguarda_tecla 								  ; Retorno da funcao                                       
+          JSR R7,clrFunction                                                              ; Aguarda o usuario pressionar alguma tecla.
+          JMP _ESCREVE_MENU
+
+
+NotFound:
+
+          MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgConjInex,R1                                                             ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR  
+	  CLR tecla
+	  CLR flag_dig
+	  JSR R7,aguarda_tecla 	  
+          JSR R7,clrFunction
+          JMP le_teclado_functionT          
+
+clrFunction:                                                                              ; Limpa variaveis que sao usadas
+          CLR TotalDePecas                                                                ; com frequencia  
+          CLR Achou                                                                       ; ao longo da execucao
+          CLR Numero                                                                      ; do programa
+          CLR unidade
+          CLR dezena
+          CLR centena
+          RTS R7
+
+
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+convertevalor:                                                                            ; Usada para converter o que 
+          MOV #9, R4                                                                      ; o usuario digita para aparecer
+          MOV 65528, R2                                                                   ; no led
+          MOV 65528, R5		
+          SUB #48, R2
+          SUB #48, R5
+          MOV 65529, R3
+          SUB #48, R3
+    lacosoma:
+          ADD R5, R2
+	  SOB R4, lacosoma
+	  ADD R2, R3
+	  MOV R3, numconjunto
+	  RTS R7
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+conjuntoinexistente:
+          MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgConjInex,R1                                                             ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR
+          JSR R7,aguarda_tecla
+	  JMP le_teclado_functionT
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+convertepratela:
+
+          MOV varconversao, R3	                                                          ; Valor a ser exibido no visor
+
+                                                                                          ; Dividir por 10
+          CLR R0		                                                          ; 16 bits mais significativos do dividendo
+          MOV R3,R1      	                                                          ; 16 bits menos significativos do dividendo
+          MOV #10,R2                                                                      ; Divisor (16 bits)
+          JSR R7,_S_DIVIDIR
+
+          ADD #48,R1                                                                      ; Converte resto para ASCII
+
+          MOV R1,65524                                                                    ; Move unidade para o LED 0 na tela
+
+          MOV R0,R1                                                                       ; Dividir quociente de antes por 10
+          CLR R0
+          JSR R7,_S_DIVIDIR
+
+          ADD #48,R1                                                                      ; Converter o que sobrou para ASCII
+
+          MOV R1,65523                                                                    ; Mover dezena para LED 3 na tela
+
+          MOV R0,R1                                                                       ; Dividir quociente de antes por 10
+          CLR R0
+          JSR R7,_S_DIVIDIR
+
+          ADD #48,R1                                                                      ; Converte o que sobrou para ASCII
+
+          MOV R1,65522                                                                    ; Move centena para LED 2 na tela
+
+	  MOV R0,R1                                                                       ; Divide quociente que tinha antes por 10
+          CLR R0
+	  JSR R7,_S_DIVIDIR
+
+	  ADD #48,R1                                                                      ; Converte resto para ASCII
+
+	  MOV R1,65521                                                                    ; Move milhar para LED 1 na tela
+
+          MOV R0,R1                                                                       ; Divide quociente que estava antes por 10
+          CLR R0
+	  JSR R7,_S_DIVIDIR
+
+	  ADD #48,R1                                                                      ; Converter o que sobrou para ASCII
+
+	  MOV R1,65520                                                                    ; move dezena de milhar para LED 0 na tela
+
+	  RTS R7
+
+_S_DIVIDIR:
+	  TST R2                                                                          ; Testa divisor
+          BNE __NAO_ZERO                                                                  ; Caso != zero, continua
+          CCC V                                                                           ; Indica divisao por zero
+          RTS R7                                                                          ; Retorna ao ponto de chamada
+
+__NAO_ZERO:
+          CMP R0,R2                                                                       ; Testa se dividendo(MSB)
+                                                                                          ; E' >= que o divisor
+          BCC __INDICA_ESTOURO                                                            ; Se for, indicar estouro
+                                                                                          ; Perceber: BCC equivale a um
+                                                                                          ; BGE para int. positivos
+
+          MOV R3,-(R6)                                                                    ; Armazena R3 na pilha
+          MOV R4,-(R6)                                                                    ; Armazena R4 na pilha
+          MOV R5,-(R6)                                                                    ; Armazena R5 na pilha
+          MOV R0,R3                                                                       ; Copia dividendo para
+          MOV R1,R4                                                                       ; R3 e R4 (=q no final)
+          MOV #16,R5                                                                      ; Inicializa contador
+          ASL R4                                                                          ; Desloca dividendo p/a
+          ROL R3                                                                          ; esquerda e abre espaco
+          BCS __SUBTRAI_DIVISOR                                                           ; p/um bit do quociente
+          CMP R3,R2                                                                       ; se n+1 msbits do divid.
+          BCS __BIT_ZERO                                                                  ; maiores que divisor (= BLT p/inteiros positivos)
+__SUBTRAI_DIVISOR:
+          SUB R2,R3                                                                       ; Subtrai divisor e
+          INC R4                                                                          ; ajusta bit do quociente
+__BIT_ZERO:
+          SOB R5,16                                                                       ; Decrementa R5; se != 0, repete
+          MOV R3,R1                                                                       ; copia resto para R1
+          MOV R4,R0                                                                       ; copia quociente p/R0
+          MOV (R6)+,R5                                                                    ; restaura
+          MOV (R6)+,R4                                                                    ; registradores
+          MOV (R6)+,R3                                                                    ; de trabalho
+          CCC V Z                                                                         ; limpa cod. de condicao
+          RTS R7                                                                          ; retorna ao ponto de chamada
+
+__INDICA_ESTOURO:
+          SCC V                                                                           ; Indica overflow e nao
+          CCC Z                                                                           ; divisao por zero
+          RTS R7                                                                          ; retorna ao ponto de chamada
+
+le_teclado_functionC:
+	  CLR Numero
+	  CLR unidade
+	  CLR dezena
+	  CLR centena	
+          MOV #0,Flag
+          MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgT,R1                                                                    ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR
+          JSR R7, ClearAllReg
+          MOV #65520, R1                    
+          MOV #19,PosicaoCursor
+          JSR R7, LerTeclado
+          JSR R7, MultiplicaNumero
+	 
+	  CLR R0 
+	  MOV #ListaDeEstantes,R0 
+	  MOV #-1,R1
+
+	  procuraEstante:
+          MOV (R0)+,R2
+          CMP #0,R2
+	  BEQ FimListaDeEstantes
+          INC R1
+	  CMP R1,Numero
+	  BEQ AchouEstante
+	  BGT FimListaDeEstantes
+          JMP procuraEstante 	  
+
+	  FimListaDeEstantes:
+	  MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgEstanteError,R1                                                         ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR
+	  JSR R7,aguarda_tecla   
+          JMP le_teclado_functionC
+		
+	  AchouEstante:	
+	  MOV R2,Estante
+
+	  MOV #1,Flag
+          
+PedeConjunto:
+	  CLR Numero
+	  CLR unidade
+	  CLR dezena
+	  CLR centena	
+	  MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgInsConjunto,R1                                                          ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR
+          JSR R7, ClearAllReg
+          MOV #65520, R1                    
+          MOV #20,PosicaoCursor
+          JSR R7, LerTeclado
+          JSR R7, MultiplicaNumero
+          MOV Estante,R1
+          
+PerEstante:
+	  CLR R3
+          CLR R2
+          MOV (R1)+,R2                                                                    ; Busca o elemento da 'estante'
+          BMI FimEst                                                                      ; Caso o elemento for negativo entao acabou 'estante'
+          MOV R2,R3                                                                       ; Copia o elemento para outro registrador
+          ASR R3                                                                          ; Deixa separado os bits que sao 'conjunto'                  
+          ASR R3
+          ASR R3
+          ASR R3
+          ASR R3
+          ASR R3 
+          ASR R3 
+          ASR R3
+          CMP R3,Numero                                                                   ; Caso o conjunto o conjunto nao for procurado,
+          BNE PerEstante                                                                  ; volta e busca outro elemento
+       
+          AND #HFF,R2                                                                     ; Caso o conjunto e' procurado
+          ADD R2,TotalDePecas                                                             ; Deixa separado os bits que sao da 'quantidade'
+          INC Achou
+          JMP PerEstante                                                                  ; Volta até que termine a 'estante'.
+
+FimEst: 
+          CMP #0,Achou                        
+          BEQ NFound
+
+	  MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgTotalPecas,R1                                                           ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR        
+
+          MOV TotalDePecas ,R5
+
+          MOV	R5,-(R6)                                                                  ; R5 tera' que conter o inteiro para ser printado no visor
+          MOV	#led,R5                                                                   ; Move o endereço do led para o R5
+          ADD	#20,R5                                                                    ; 28 e' a posição para comecar a escrever o valor no led
+          MOV	R5,-(R6)         
+          JSR	R7,intTOstring                                                            ; Chama a funcao que converte o valor inteiro->string
+          ADD	#4,R6                                                                     ; Ajeita a pilha por causa do que foi mexido em intTOstring. 
+	  JSR R7,aguarda_tecla 								  ; Retorno da funcao                                       
+          JSR R7,clrFunction                                                              ; Aguarda o usuario pressionar alguma tecla.
+          JMP _ESCREVE_MENU
+
+	  
+
+NFound:
+ 
+          MOV #36,R0                                                                      ; Tamanho da mensagem (em caracteres)
+          MOV #msgConjInex,R1                                                             ; Endereco da mensagem a ser escrita no visor
+          MOV #65500,R2                                                                   ; Endereco do LED onde deve iniciar a mensagem
+          JSR R7,_S_ESCREVER_NO_VISOR  
+	  CLR tecla
+	  CLR flag_dig
+	  JSR R7,aguarda_tecla 	  
+          JSR R7,clrFunction
+          JMP PedeConjunto                             
+  
+;||------------------------------------------------------------------------------------------------------------------------------------------------------||
+ClearAllReg:
+	  CLR R0
+	  CLR R1
+	  CLR R2
+	  CLR R3
+	  CLR R4
+	  CLR R5
+	  RTS R7
+;||------------------------------------------------------------------------------------------------------------------------------------------------------||
+LerTeclado:
+	  MOV #3,R0                                                                       ; Contador para o maximo de caracteres que podem ser digitados.
+	  MOV #led,R1                                                                     ; Adiciona led no cursor resultado é o local
+	  ADD posicaoCursor, R1                                                           ; de onde pode ser digitado
+	  INC R1
+
+RecebeuNumero:
+	  CMP #0,R0                                                                       ; Caso R0=0 então foram digitados tres numeros.
+	  BEQ PressioneEnter
+	  JMP EsperaNumero
+
+PressioneEnter:                                                                           ; Apos o usuario digitar 3 numeros 
+	  CMP #H80,flag_dig                                                               ; fica aguardando a confirmação com enter,
+	  BNE PressioneEnter                                                              ; desistencia da opcao ou BackSpace 
+	  CLR flag_dig                                                                    ; demais teclas seram ignoradas.
+	  CMP #13,tecla
+	  BEQ Ret
+	  CMP #27,tecla
+	  BEQ VerificaOp
+	  CMP #08,tecla
+	  BEQ DigitouBa
+	  BR PressioneEnter
+
+VerificaOp:                                                                               ; trecho utilizado para realizar 
+	  JMP VerificaOpcao                                                               ; desvios longos.
+	  DigitouBa:
+	  JMP DigitouBackSpace
+
+Ret:
+	  CMP #3,R0
+	  BEQ EsperaNumero
+	  JMP Return
+
+DigitouBackSpace:                                                                         ; Quando pressionado backSpace
+	  CMP #3,R0                                                                       ; Verifica se R0 = 3, se sim, entao
+	  BEQ EsperaNumero                                                                ; Nenhum numero foi digitado, logo nao realiza nenhuma
+	  MOV #' ',(R1)                                                                   ; operacao, e retorna para aguardar uma nova tecla.
+	  DEC R1                                                                          ; Caso contrario Apaga o Ultimo digito,Decrementa a posicao do cursor,
+	  INC R0                                                                          ; incrementa o contador e volta para aguardar uma nova tecla.
+	  JSR R7,VoltaString                                                              ; Ajeita o numero.
+	  JMP EsperaNumero
+
+EsperaNumero:                                                                             ; Aguarda a entrada de uma nova tecla 
+	  MOV #'_',(R1)                                                                   ; veficando se validas
+	  CMP #H80,flag_dig                                                               ; caso a tecla digitada for valida
+	  BNE EsperaNumero                                                                ; desvia o fluxo do programa
+	  CLR flag_dig                                                                    ; para a opcao desejada ou rebece o numero
+	  CMP #13,tecla                                                                   ; informado.
+	  BEQ Ret
+	  CMP #27,tecla
+	  BEQ DigitouEsc
+	  CMP #08,tecla
+	  BEQ DigitouBackSpace
+	  CMP #48,tecla
+	  BEQ DigitouNumero
+	  CMP #49,tecla
+	  BEQ DigitouNumero
+	  CMP #50,tecla
+	  BEQ DigitouNumero
+	  CMP #51,tecla
+	  BEQ DigitouNumero
+	  CMP #52,tecla
+	  BEQ DigitouNumero
+	  CMP #53,tecla
+	  BEQ DigitouNumero
+	  CMP #54,tecla
+	  BEQ DigitouNumero
+	  CMP #55,tecla
+	  BEQ DigitouNumero
+	  CMP #56,tecla
+	  BEQ DigitouNumero
+	  CMP #57,tecla
+	  BEQ DigitouNumero
+	  BR EsperaNumero
+
+
+
+DigitouEsc:
+	  JMP VerificaOpcao
+
+DigitouNumero:                                                                            ; Caso tenha sido digitado um numero valido:
+	  MOV tecla,(R1)                                                                  ; Move a tecla digitada para o visor
+	  SUB #48,tecla                                                                   ; subtrai 48 da tecla para obter o valor real
+	  JSR R7, DeslocaString                                                           ; digitada.
+	  DEC R0                  
+	  INC R1                                                                          ; Incrementa a posição do visor onde a proxima 
+	  CLR tecla                                                                       ; tecla deve ser digitada
+	  JMP RecebeuNumero     
+
+VerificaOpcao:                                                                            ; Verifica se em qual contexto a o Cancel foi
+	  CMP #1,Flag                                                                     ; pressionado, se Ler Estantes -> Ler Conjunto
+	  BEQ LerEst                                                                      ; entao volta para Ler Entantes, Caso Contrario   
+	  JMP _ESCREVE_MENU                                                               ; retorna sempre ao menu.
+
+Return:
+	  RTS R7         
+
+LerEst:
+JMP le_teclado_functionC
+
+
+BackEstantes:
+	  JMP Return                                          
+
+;||------------------------------------------------------------------------------------------------------------------------------------------------------||
+ConverteNumero:                                                                           ; Converte uma string de numeros (unidade,dezena,centena)
+                                                                                          ; para um numero inteiro.
+	  MOV unidade,numero
+                                                                                          ; dz(int dezena) {
+dz:                                                                                       ; if(dezena=0)
+   CMP #0,dezena                                                                          ;   ct(centena);
+   BEQ ct                                                                                 ; else {  
+   ADD #10,numero                                                                         ;  numero += 10;
+   DEC dezena                                                                             ;  dezena--;
+   BR dz                                                                                  ;  dz(dezena);
+			                                                                  ; }     
+                                                                                          ;}
+ct:                                                                                       ;Mesma coisa que acima, so' trocando dz por ct
+   CMP #0,centena
+   BEQ end
+   ADD #100,numero
+   DEC centena
+   BR ct
+
+end:
+	  RTS R7
+;||------------------------------------------------------------------------------------------------------------------------------------------------------||
+
+DeslocaString:
+	  MOV dezena,centena                                                              ; Deslocamentos para formar o numero na tela
+	  MOV unidade,dezena
+	  MOV tecla,unidade
+	  RTS R7
+
+VoltaString:
+	  MOV dezena,unidade
+	  MOV centena,dezena
+	  RTS R7
+
+
+MultiplicaNumero:
+	  MOV unidade, Numero
+
+dez:
+   CMP #0,dezena
+   BEQ cem
+   ADD #10,Numero
+   DEC dezena
+   BR dez
+
+cem:
+   CMP #0,centena
+   BEQ fimConversao
+   ADD #100,Numero
+   DEC centena
+   BR cem
+
+fimConversao:
+   RTS R7
+
+
+;--------------------------------------------------------------------- Printf() ---------------------------------------------------------------------------||
+
+_S_ESCREVER_NO_VISOR:
+__VOLTA_ESCR:
+	  MOV (R1),R3                                                                     ; Coloca 2 caracteres em R3
+          ASR R3                                                                          ; alinha primeiro caractere
+          ASR R3                                                                          ; a direita do registrador,
+          ASR R3                                                                          ; porque quando se escreve
+          ASR R3                                                                          ; na memoria a partir do
+          ASR R3                                                                          ; endereco 65500 apenas o byte
+          ASR R3                                                                          ; menos significativo e' escrito
+          ASR R3                                                                          ; na posicao correspondente
+          ASR R3                                                                          ; a um LED do visor
+          MOV R3,(R2)                                                                     ; move para o visor
+          SOB R0,__SEGUNDO                                                                ; se ja moveu todo o texto,
+          RTS R7                                                                          ; retorna ao ponto de chamada
+                                                                                          ; senao, vai mover o segundo
+                                                                                          ; caractere da mesma palavra
+__SEGUNDO:
+          INC R2                                                                          ; Aponta para proximo LED
+          BEQ __FIM_VISOR2                                                                ; fim do visor - volta ao LED 00
+__CONTINUA2:
+          MOV (R1)+,R3                                                                    ; mesmos 2 caracteres em R3 e
+                                                                                          ; incrementa apontador do texto
+          MOV R3,(R2)                                                                     ; desta vez, move o segundo byte
+          SOB R0,__PROXIMO_LED                                                            ; se ja moveu todo o texto,
+          RTS R7                                                                          ; retorna ao ponto de chamada
+__PROXIMO_LED:
+          INC R2                                                                          ; senao, aponta proximo LED
+          BNE __VOLTA_ESCR                                                                ; e repete o laco
+                                                                                          ; fim do visor - volta ao LED 00
+__FIM_VISOR1:
+          MOV #65500,R2                                                                   ; aponta para primeiro LED
+          BR  __VOLTA_ESCR                                                                ; volta a escrever no visor
+__FIM_VISOR2:
+          MOV #65500,R2                                                                   ; aponta para primeiro LED
+          BR  __CONTINUA2                                                                 ; volta a escrever no visor
+;||--------------------------------------------------------------------------------------------------------------------------------------------------------||
+;||---------------------------------------------------------------- Fim do programa -----------------------------------------------------------------------||
+finalizar:
+	MOV #36,R0                                                                        ; Tamanho da mensagem (em caracteres)
+	MOV #msgFim,R1                                                                    ; Endereco da mensagem a ser escrita no visor
+	MOV #65500,R2                                                                     ; Endereco do LED onde deve iniciar a mensagem
+	JSR R7,_S_ESCREVER_NO_VISOR
+	HLT
